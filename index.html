@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>俄罗斯方块 · TETRIS</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230b0e14'/><rect x='15' y='15' width='30' height='30' fill='%234fd1c5' rx='5'/><rect x='50' y='15' width='30' height='30' fill='%23ad4ee5' rx='5'/><rect x='15' y='50' width='30' height='30' fill='%23f7d308' rx='5'/><rect x='50' y='50' width='30' height='30' fill='%23ef2029' rx='5'/></svg>">
+<style>
+  :root{
+    --bg:#0b0e14;
+    --panel:#131824;
+    --panel-2:#0f131d;
+    --line:#232b3d;
+    --text:#e6ecf7;
+    --muted:#6b7891;
+    --accent:#4fd1c5;
+    --I:#31c7ef; --J:#5a65de; --L:#ef7921; --O:#f7d308;
+    --S:#42b642; --T:#ad4ee5; --Z:#ef2029;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(1200px 700px at 50% -10%, #1a2233 0%, transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:"Inter","PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    min-height:100%;
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  .stage{
+    display:grid;
+    grid-template-columns:auto 200px;
+    gap:22px;
+    padding:20px;
+    align-items:start;
+  }
+  /* ---------- 棋盘 ---------- */
+  .board-wrap{
+    position:relative;
+    border-radius:14px;
+    padding:8px;
+    background:linear-gradient(180deg,#1b2334,#11151f);
+    box-shadow:0 30px 70px -20px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.06);
+    border:1px solid var(--line);
+  }
+  canvas{display:block;border-radius:8px;background:#080b11}
+  /* ---------- 侧栏 ---------- */
+  .side{display:flex;flex-direction:column;gap:12px}
+  .card{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:10px 12px;
+    box-shadow:0 12px 30px -18px rgba(0,0,0,.9);
+  }
+  .card h4{
+    font-size:10px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--muted); font-weight:600; margin-bottom:6px;
+  }
+  .mini{display:flex; justify-content:center}
+  .mini canvas{background:transparent}
+  .score-main{
+    font-size:26px; font-weight:700; letter-spacing:.02em;
+    font-variant-numeric:tabular-nums; color:#fff;
+    text-shadow:0 0 24px rgba(79,209,197,.35);
+  }
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stat .k{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+  .stat .v{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+  .keys{font-size:11px;color:var(--muted);line-height:1.9}
+  .keys b{color:#a9b6cc;font-weight:600}
+  kbd{
+    display:inline-block;min-width:16px;text-align:center;
+    background:#1d2431;border:1px solid #2c3547;border-bottom-width:2px;
+    border-radius:4px;padding:1px 4px;font-size:10px;color:#c3cee0;
+    font-family:inherit;
+  }
+  /* ---------- 浮层 ---------- */
+  .overlay{
+    position:absolute; inset:8px;
+    border-radius:8px;
+    background:rgba(6,9,15,.82);
+    backdrop-filter:blur(6px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; text-align:center; padding:20px;
+    opacity:0; pointer-events:none; transition:opacity .22s ease, visibility 0s linear .22s;
+    visibility:hidden;
+  }
+  .overlay.show{opacity:1;pointer-events:auto;visibility:visible;transition:opacity .22s ease}
+  .overlay h2{font-size:22px;letter-spacing:.06em;font-weight:700}
+  .overlay p{font-size:12px;color:var(--muted);line-height:1.7;max-width:230px}
+  .btn{
+    appearance:none;border:none;cursor:pointer;
+    background:linear-gradient(180deg,#4fd1c5,#2ba99f);
+    color:#04231f;font-weight:700;font-size:13px;letter-spacing:.08em;
+    padding:11px 26px;border-radius:9px;
+    box-shadow:0 8px 22px -8px rgba(79,209,197,.8);
+    transition:transform .12s ease, filter .12s ease;
+    font-family:inherit;
+  }
+  .btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+  .btn:active{transform:translateY(1px)}
+  .btn.ghost{
+    background:transparent;color:#9aa7bd;border:1px solid var(--line);
+    box-shadow:none;font-weight:600;padding:9px 20px;font-size:12px;
+  }
+  .btn.ghost:hover{color:#e6ecf7;border-color:#39445c}
+  .combo-toast{
+    position:absolute; left:50%; top:22%;
+    transform:translate(-50%,0) scale(.9);
+    font-size:19px;font-weight:800;letter-spacing:.06em;
+    color:var(--accent); text-shadow:0 0 26px rgba(79,209,197,.7);
+    opacity:0; pointer-events:none;
+    transition:opacity .3s ease, transform .3s cubic-bezier(.2,1.4,.4,1);
+    white-space:nowrap;
+  }
+  .combo-toast.show{opacity:1;transform:translate(-50%,-14px) scale(1)}
+  @media (max-width:640px){
+    body{align-items:flex-start;overflow-y:auto}
+    .stage{
+      grid-template-columns:1fr;
+      gap:10px;padding:10px;width:100%;
+      justify-items:center;
+    }
+    .side{
+      flex-direction:row;flex-wrap:wrap;
+      width:100%;max-width:420px;gap:8px;
+    }
+    .side .card{flex:1 1 calc(50% - 4px);padding:8px 10px}
+    .side .card:last-child{flex:1 1 100%}
+    .score-main{font-size:22px}
+    .keys{display:none}
+    .card h4{font-size:9px;margin-bottom:4px}
+    .mini canvas{height:60px !important}
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="board-wrap">
+    <canvas id="board"></canvas>
+    <div class="combo-toast" id="toast"></div>
+    <div class="overlay show" id="overlay">
+      <h2 id="ov-title">俄罗斯方块</h2>
+      <p id="ov-text">方向键移动 · ↑旋转 · 空格硬降<br>C 暂存 · P 暂停</p>
+      <button class="btn" id="ov-btn">开始游戏</button>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h4>分数</h4>
+      <div class="score-main" id="score">0</div>
+    </div>
+    <div class="card">
+      <h4>下一个</h4>
+      <div class="mini"><canvas id="next" width="120" height="80"></canvas></div>
+    </div>
+    <div class="card">
+      <h4>暂存 (C)</h4>
+      <div class="mini"><canvas id="hold" width="120" height="80"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="stats">
+        <div class="stat"><div class="k">等级</div><div class="v" id="level">1</div></div>
+        <div class="stat"><div class="k">消行</div><div class="v" id="lines">0</div></div>
+      </div>
+    </div>
+    <div class="card keys">
+      <div><kbd>←</kbd><kbd>→</kbd> <b>移动</b> &nbsp; <kbd>↓</kbd> <b>软降</b></div>
+      <div><kbd>↑</kbd>/<kbd>X</kbd> <b>顺时针</b> &nbsp; <kbd>Z</kbd> <b>逆时针</b></div>
+      <div><kbd>空格</kbd> <b>硬降</b> &nbsp; <kbd>C</kbd> <b>暂存</b></div>
+      <div><kbd>P</kbd> <b>暂停</b> &nbsp; <kbd>R</kbd> <b>重开</b></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ==================== 配置 ==================== */
+const COLS = 10, ROWS = 20;
+const BLOCK = 30;                       // 每格像素
+const DAS = 150, ARR = 40;              // 按住左右的最初延迟 / 重复间隔
+const SOFT_DROP_INTERVAL = 35;          // 软降重复间隔
+const LOCK_DELAY = 500;                 // 落地锁定延迟
+const MAX_LOCK_RESET = 15;              // 锁定延迟最多重置次数
+
+// 每级下落间隔（毫秒），参考经典速度曲线
+const GRAVITY = [800,720,630,550,470,380,300,220,130,100,80,80,80,70,70,70,50,50,50,30];
+
+const COLORS = {
+  I:'#31c7ef', J:'#5a65de', L:'#ef7921', O:'#f7d308',
+  S:'#42b642', T:'#ad4ee5', Z:'#ef2029'
+};
+
+// SRS 形状矩阵（每个旋转态由矩阵旋转生成，此处只写初始态）
+const SHAPES = {
+  I:[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+  J:[[1,0,0],[1,1,1],[0,0,0]],
+  L:[[0,0,1],[1,1,1],[0,0,0]],
+  O:[[1,1],[1,1]],
+  S:[[0,1,1],[1,1,0],[0,0,0]],
+  T:[[0,1,0],[1,1,1],[0,0,0]],
+  Z:[[1,1,0],[0,1,1],[0,0,0]]
+};
+
+// SRS 踢墙表：JLSTZ 与 I 各一套，键为 "from>to"
+const KICKS_JLSTZ = {
+  '0>1':[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
+  '1>0':[[0,0],[1,0],[1,-1],[0,2],[1,2]],
+  '1>2':[[0,0],[1,0],[1,-1],[0,2],[1,2]],
+  '2>1':[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
+  '2>3':[[0,0],[1,0],[1,1],[0,-2],[1,-2]],
+  '3>2':[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
+  '3>0':[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
+  '0>3':[[0,0],[1,0],[1,1],[0,-2],[1,-2]]
+};
+const KICKS_I = {
+  '0>1':[[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
+  '1>0':[[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
+  '1>2':[[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
+  '2>1':[[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
+  '2>3':[[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
+  '3>2':[[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
+  '3>0':[[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
+  '0>3':[[0,0],[-1,0],[2,0],[-1,2],[2,-1]]
+};
+
+/* ==================== 工具函数 ==================== */
+const rnd = n => Math.floor(Math.random() * n);
+
+function rotateCW(m){
+  const n = m.length, out = Array.from({length:n}, () => Array(n).fill(0));
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++)
+      out[x][n - 1 - y] = m[y][x];
+  return out;
+}
+function rotateCCW(m){
+  const n = m.length, out = Array.from({length:n}, () => Array(n).fill(0));
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++)
+      out[n - 1 - x][y] = m[y][x];
+  return out;
+}
+
+/* ==================== 状态 ==================== */
+let grid;                 // 2D: null | {type}
+let bag = [];             // 7-bag
+let cur, nextType, holdType, holdUsed;
+let score, lines, level, combo, backToBack;
+let gravityAcc, gravityTimer;
+let softDropTimer, leftTimer, rightTimer, lockTimer, lockResets;
+let dropKey, leftKey, rightKey;
+let state = 'ready';      // ready | playing | paused | over
+let lastTime = 0;
+let animFrame = 0;
+
+/* ==================== DOM ==================== */
+const boardCanvas = document.getElementById('board');
+const ctx = boardCanvas.getContext('2d');
+const nextCanvas = document.getElementById('next');
+const nctx = nextCanvas.getContext('2d');
+const holdCanvas = document.getElementById('hold');
+const hctx = holdCanvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const levelEl = document.getElementById('level');
+const linesEl = document.getElementById('lines');
+const overlay = document.getElementById('overlay');
+const ovTitle = document.getElementById('ov-title');
+const ovText = document.getElementById('ov-text');
+const ovBtn = document.getElementById('ov-btn');
+const toast = document.getElementById('toast');
+
+/* ==================== 尺寸 & DPR ==================== */
+let BS = 30;   // 每格像素尺寸
+
+fitCanvas();
+
+function fitCanvas(){
+  const isNarrow = window.innerWidth < 640;
+
+  // 可用高度：窄屏时侧栏在下方，需预留更多空间
+  const availH = isNarrow
+    ? Math.min(window.innerHeight * 0.62, 560)
+    : Math.min(window.innerHeight - 90, 780);
+  // 可用宽度：窄屏需扣掉内边距
+  const availW = isNarrow
+    ? window.innerWidth - 44
+    : window.innerWidth - 280;
+
+  BS = Math.floor(Math.min(availH / ROWS, availW / COLS));
+  BS = Math.max(12, BS);
+
+  const dpr = window.devicePixelRatio || 1;
+  boardCanvas.style.width = (COLS * BS) + 'px';
+  boardCanvas.style.height = (ROWS * BS) + 'px';
+  boardCanvas.width = COLS * BS * dpr;
+  boardCanvas.height = ROWS * BS * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  for (const c of [nextCanvas, holdCanvas]){
+    c.style.width = '100%'; c.style.height = '68px';
+    const rect = c.getBoundingClientRect();
+    const w = rect.width || 120;
+    c.width = w * dpr; c.height = 68 * dpr;
+    c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+    c._w = w; c._h = 68;
+  }
+}
+window.addEventListener('resize', () => { fitCanvas(); render(); });
+
+/* ==================== 初始化 ==================== */
+function reset(){
+  grid = Array.from({length:ROWS}, () => Array(COLS).fill(null));
+  bag = [];
+  nextType = null;
+  holdType = null; holdUsed = false;
+  // 状态
+  score = 0; lines = 0; level = 1;
+  combo = -1; backToBack = false;
+  gravityAcc = 0; gravityTimer = GRAVITY[0];
+  softDropTimer = 0; leftTimer = 0; rightTimer = 0;
+  lockTimer = 0; lockResets = 0;
+  dropKey = leftKey = rightKey = false;
+  animFrame = 0;
+  ensureNext();
+  spawn();
+  updateHUD();
+  render();
+}
+
+function ensureNext(){
+  if (!nextType) nextType = pullFromBag();
+}
+
+function pullFromBag(){
+  if (bag.length === 0){
+    bag = ['I','J','L','O','S','T','Z'];
+    // Fisher-Yates
+    for (let i = bag.length - 1; i > 0; i--){
+      const j = rnd(i + 1);
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+  }
+  return bag.pop();
+}
+
+function makePiece(type){
+  // 生成 4 个旋转态
+  const states = [SHAPES[type].map(r => r.slice())];
+  for (let i = 1; i < 4; i++) states.push(rotateCW(states[i-1]));
+  // 生成位置：水平居中，顶部
+  const size = SHAPES[type].length;
+  const x = Math.floor((COLS - size) / 2);
+  const y = type === 'I' ? -1 : 0;
+  return { type, rot:0, states, x, y };
+}
+
+function spawn(){
+  ensureNext();
+  cur = makePiece(nextType);
+  nextType = pullFromBag();
+  holdUsed = false;
+  lockTimer = 0; lockResets = 0;
+  gravityAcc = 0;
+  // 关键：重置下落与输入计时，避免上一块的状态残留（如按住方向键的 DAS 计时）
+  softDropTimer = SOFT_DROP_INTERVAL;
+  leftTimer = 0; rightTimer = 0;
+
+  // 出生即碰撞 → 游戏结束
+  if (collide(cur.type, cur.states[0], cur.x, cur.y)){
+    gameOver();
+  }
+  drawSidePanels();
+}
+
+/* ==================== 碰撞与移动 ==================== */
+function collide(type, matrix, px, py){
+  const n = matrix.length;
+  for (let y = 0; y < n; y++){
+    for (let x = 0; x < n; x++){
+      if (!matrix[y][x]) continue;
+      const gx = px + x, gy = py + y;
+      if (gx < 0 || gx >= COLS || gy >= ROWS) return true;
+      if (gy < 0) continue;            // 允许在顶部之上
+      if (grid[gy][gx]) return true;
+    }
+  }
+  return false;
+}
+
+// 返回是否成功移动
+function move(dx, dy){
+  if (state !== 'playing') return false;
+  if (!collide(cur.type, cur.states[cur.rot], cur.x + dx, cur.y + dy)){
+    cur.x += dx; cur.y += dy;
+    if (dy > 0) gravityAcc = 0;
+    // 位置变化后若仍悬空，重置锁定计时
+    if (dx !== 0 && !isGrounded()){
+      lockTimer = 0;
+    }
+    else if (dx !== 0 && isGrounded() && lockResets < MAX_LOCK_RESET){
+      lockTimer = 0; lockResets++;
+    }
+    return true;
+  }
+  return false;
+}
+
+function isGrounded(){
+  return collide(cur.type, cur.states[cur.rot], cur.x, cur.y + 1);
+}
+
+function rotate(dir){
+  if (state !== 'playing' || cur.type === 'O') {
+    if (cur.type === 'O' && state === 'playing') return;
+    if (state !== 'playing') return;
+  }
+  const nextRot = (cur.rot + (dir > 0 ? 1 : 3)) % 4;
+  const kicks = cur.type === 'I' ? KICKS_I : KICKS_JLSTZ;
+  const key = `${cur.rot}>${nextRot}`;
+  const tests = [[0,0]].concat(kicks[key] || []);
+  for (const [dx, dy] of tests){
+    // SRS 中 y 轴正方向为向上，屏幕坐标需取反
+    if (!collide(cur.type, cur.states[nextRot], cur.x + dx, cur.y - dy)){
+      cur.rot = nextRot;
+      cur.x += dx;
+      cur.y -= dy;
+      if (isGrounded() && lockResets < MAX_LOCK_RESET){
+        lockTimer = 0; lockResets++;
+      }
+      return;
+    }
+  }
+}
+
+function hardDrop(){
+  if (state !== 'playing') return;
+  let dropped = 0;
+  while (!collide(cur.type, cur.states[cur.rot], cur.x, cur.y + 1)){
+    cur.y++; dropped++;
+  }
+  if (dropped > 0) addScore(dropped * 2);
+  lockPiece();
+}
+
+function softDrop(){
+  if (move(0, 1)){
+    addScore(1);
+    render();
+  } else {
+    lockTimer = LOCK_DELAY;   // 触底立即落锁更快
+  }
+}
+
+/* ==================== 暂存 ==================== */
+function hold(){
+  if (state !== 'playing' || holdUsed) return;
+  const curType = cur.type;
+  if (holdType === null){
+    holdType = curType;
+    ensureNext();
+    cur = makePiece(nextType);
+    nextType = pullFromBag();
+  } else {
+    const t = holdType;
+    holdType = curType;
+    cur = makePiece(t);
+  }
+  holdUsed = true;
+  lockTimer = 0; lockResets = 0;
+  // 交换后若发生碰撞，尝试上移避免卡死
+  let guard = 0;
+  while (collide(cur.type, cur.states[cur.rot], cur.x, cur.y) && guard++ < 20) cur.y--;
+  drawSidePanels();
+  render();
+}
+
+/* ==================== 锁定与消行 ==================== */
+function lockPiece(){
+  const m = cur.states[cur.rot];
+  const n = m.length;
+  let overflow = false;
+  for (let y = 0; y < n; y++){
+    for (let x = 0; x < n; x++){
+      if (!m[y][x]) continue;
+      const gy = cur.y + y, gx = cur.x + x;
+      if (gy < 0){ overflow = true; continue; }
+      grid[gy][gx] = { type: cur.type };
+    }
+  }
+
+  // 先结算消行（即使有部分方块在屏幕上方，已落下的行列也应正常计算）
+  const cleared = clearLines();
+  resetComboIfNoClear(cleared);
+
+  cur = null;
+  // 有方块卡在棋盘顶部之上 → 无法继续，游戏结束
+  if (overflow){ gameOver(); return; }
+  spawn();
+}
+
+function clearLines(){
+  let cleared = 0;
+  let lastK = 0;
+  for (let y = ROWS - 1; y >= 0; y--){
+    if (grid[y].every(c => c)){
+      grid.splice(y, 1);
+      grid.unshift(Array(COLS).fill(null));
+      cleared++; y++;
+      lastK++;
+    }
+  }
+  if (cleared > 0){
+    combo++;
+    lines += cleared;
+    let base = [0, 100, 300, 500, 800][cleared];
+    // Back-to-Back：连续 4 行消除额外 1.5 倍
+    if (cleared === 4){
+      if (backToBack) base = Math.floor(base * 1.5);
+      backToBack = true;
+    } else {
+      backToBack = false;
+    }
+    const comboBonus = combo > 0 ? 50 * combo : 0;
+    addScore(base * level + comboBonus);
+
+    if (lines >= level * 10){
+      level = Math.floor(lines / 10) + 1;
+    }
+    showToast(cleared === 4 ? 'TETRIS!' + (backToBack ? ' B2B' : '') : ['','SINGLE','DOUBLE','TRIPLE'][cleared] + (combo > 0 ? ` ×${combo+1}` : ''));
+    drawSidePanels();
+  }
+  return cleared;
+}
+// 注意：combo 在 clearLines 内累加，无消行时由下方调用方重置
+function resetComboIfNoClear(cleared){
+  if (cleared === 0) combo = -1;
+}
+
+function addScore(n){
+  score += n;
+  scoreEl.textContent = score.toLocaleString('en-US');
+}
+
+function showToast(text){
+  toast.textContent = text;
+  toast.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toast.classList.remove('show'), 900);
+}
+
+/* ==================== 绘制 ==================== */
+function roundRect(c, x, y, w, h, r){
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+function shade(hex, amt){
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  if (amt > 0){
+    r += (255 - r) * amt; g += (255 - g) * amt; b += (255 - b) * amt;
+  } else {
+    r *= (1 + amt); g *= (1 + amt); b *= (1 + amt);
+  }
+  return `rgb(${r|0},${g|0},${b|0})`;
+}
+
+// 以像素坐标绘制一个方块
+function paintBlock(c, px, py, size, color, alpha, ghost){
+  const pad = Math.max(1, size * 0.045);
+  const x = px + pad, y = py + pad;
+  const s = size - pad * 2;
+  const r = size * 0.18;
+  c.save();
+  if (ghost){
+    c.globalAlpha = 0.32;
+    c.fillStyle = color;
+    roundRect(c, x, y, s, s, r); c.fill();
+    c.globalAlpha = 0.85;
+    c.strokeStyle = color;
+    c.lineWidth = Math.max(1.2, size * 0.07);
+    roundRect(c, x + 1, y + 1, s - 2, s - 2, r); c.stroke();
+    c.restore();
+    return;
+  }
+  c.globalAlpha = alpha;
+  const g = c.createLinearGradient(x, y, x, y + s);
+  g.addColorStop(0, shade(color, 0.26));
+  g.addColorStop(0.55, color);
+  g.addColorStop(1, shade(color, -0.24));
+  c.fillStyle = g;
+  roundRect(c, x, y, s, s, r); c.fill();
+
+  // 顶部高光条
+  c.fillStyle = 'rgba(255,255,255,.30)';
+  roundRect(c, x + s * 0.15, y + s * 0.12, s * 0.70, s * 0.15, s * 0.07);
+  c.fill();
+
+  // 暗色内描边增强分离感
+  c.strokeStyle = 'rgba(0,0,0,.30)';
+  c.lineWidth = 1;
+  roundRect(c, x + .5, y + .5, s - 1, s - 1, r); c.stroke();
+  c.restore();
+}
+
+function render(){
+  const W = COLS * BS, H = ROWS * BS;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#080b11';
+  ctx.fillRect(0, 0, W, H);
+
+  // 网格线
+  ctx.strokeStyle = 'rgba(255,255,255,.045)';
+  ctx.lineWidth = 1;
+  for (let x = 1; x < COLS; x++){
+    ctx.beginPath(); ctx.moveTo(x * BS + .5, 0); ctx.lineTo(x * BS + .5, H); ctx.stroke();
+  }
+  for (let y = 1; y < ROWS; y++){
+    ctx.beginPath(); ctx.moveTo(0, y * BS + .5); ctx.lineTo(W, y * BS + .5); ctx.stroke();
+  }
+
+  // 已固定方块
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++)
+      if (grid[y][x])
+        paintBlock(ctx, x * BS, y * BS, BS, COLORS[grid[y][x].type], 1, false);
+
+  if (cur){
+    const m = cur.states[cur.rot];
+    const n = m.length;
+    // 幽灵落点
+    let gy = cur.y;
+    while (!collide(cur.type, m, cur.x, gy + 1)) gy++;
+    for (let y = 0; y < n; y++)
+      for (let x = 0; x < n; x++)
+        if (m[y][x] && gy + y >= 0)
+          paintBlock(ctx, (cur.x + x) * BS, (gy + y) * BS, BS, COLORS[cur.type], 1, true);
+    // 当前方块
+    for (let y = 0; y < n; y++)
+      for (let x = 0; x < n; x++)
+        if (m[y][x] && cur.y + y >= 0)
+          paintBlock(ctx, (cur.x + x) * BS, (cur.y + y) * BS, BS, COLORS[cur.type], 1, false);
+  }
+}
+
+function drawSidePanels(){
+  drawMini(nctx, nextType, false, nextCanvas);
+  drawMini(hctx, holdType, holdUsed, holdCanvas);
+}
+
+function drawMini(c, type, dim, canvas){
+  const W = canvas._w || 120, H = canvas._h || 68;
+  c.clearRect(0, 0, W, H);
+  if (!type) return;
+  const shape = SHAPES[type];
+  const n = shape.length;
+  let minX = n, maxX = -1, minY = n, maxY = -1;
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++)
+      if (shape[y][x]){
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+      }
+  const w = maxX - minX + 1, h = maxY - minY + 1;
+  const size = Math.min(20, Math.floor(Math.min((W - 16) / w, (H - 12) / h)));
+  const offX = (W - w * size) / 2, offY = (H - h * size) / 2;
+  c.save();
+  if (dim) c.globalAlpha = 0.28;
+  for (let y = minY; y <= maxY; y++)
+    for (let x = minX; x <= maxX; x++)
+      if (shape[y][x])
+        paintBlock(c, offX + (x - minX) * size, offY + (y - minY) * size, size, COLORS[type], 1, false);
+  c.restore();
+}
+
+function updateHUD(){
+  scoreEl.textContent = score.toLocaleString('en-US');
+  levelEl.textContent = level;
+  linesEl.textContent = lines;
+  dropKey = leftKey = rightKey = false;
+}
+
+/* ==================== 主循环 ==================== */
+function loop(t){
+  requestAnimationFrame(loop);
+  if (!lastTime) lastTime = t;
+  let dt = t - lastTime;
+  lastTime = t;
+  if (dt > 100) dt = 100;   // 防止切窗口后跳帧
+
+  if (state !== 'playing') return;
+
+  gravityTimer = GRAVITY[Math.min(level - 1, GRAVITY.length - 1)];
+
+  // 重力
+  gravityAcc += dt;
+  if (gravityAcc >= gravityTimer){
+    gravityAcc -= gravityTimer;
+    if (!collide(cur.type, cur.states[cur.rot], cur.x, cur.y + 1)){
+      cur.y++;
+    }
+  }
+
+  // 软降重复
+  if (dropKey){
+    softDropTimer += dt;
+    while (softDropTimer >= SOFT_DROP_INTERVAL){
+      softDropTimer -= SOFT_DROP_INTERVAL;
+      if (!collide(cur.type, cur.states[cur.rot], cur.x, cur.y + 1)){
+        cur.y++;
+        addScore(1);
+        if (isGrounded() === false) lockTimer = 0;
+      } else break;
+    }
+  } else softDropTimer = SOFT_DROP_INTERVAL;
+
+  // 左右重复
+  if (leftKey){ leftTimer += dt; while (leftTimer >= ARR){ leftTimer -= ARR; move(-1, 0); } }
+  if (rightKey){ rightTimer += dt; while (rightTimer >= ARR){ rightTimer -= ARR; move(1, 0); } }
+
+  // 锁定延迟
+  if (isGrounded()){
+    lockTimer += dt;
+    if (lockTimer >= LOCK_DELAY){
+      lockPiece();
+    }
+  } else {
+    lockTimer = 0;
+  }
+
+  render();
+  if (cur) drawSidePanels();
+}
+
+/* ==================== 控制 ==================== */
+const KEY = {
+  ArrowLeft:'left', ArrowRight:'right', ArrowDown:'down',
+  ArrowUp:'cw', ' ':'hard', c:'hold', C:'hold',
+  z:'ccw', Z:'ccw', x:'cw', X:'cw', p:'pause', P:'pause', r:'restart', R:'restart'
+};
+
+document.addEventListener('keydown', e => {
+  const action = KEY[e.key];
+  if (!action) return;
+  e.preventDefault();
+
+  if (action === 'restart'){ startGame(); return; }
+  if (action === 'pause'){ if (state === 'playing') pause(); else if (state === 'paused') resume(); return; }
+  if (state === 'ready' || state === 'over'){
+    if (e.key === 'Enter' || e.key === ' '){ startGame(); }
+    return;
+  }
+  if (state === 'paused') return;
+
+  // 阻止系统按键重复（我们自己处理 DAS）
+  if (e.repeat && (action === 'left' || action === 'right' || action === 'down')) return;
+
+  switch (action){
+    case 'left':
+      leftKey = true; leftTimer = DAS;
+      move(-1, 0);
+      render();
+      break;
+    case 'right':
+      rightKey = true; rightTimer = DAS;
+      move(1, 0);
+      render();
+      break;
+    case 'down':
+      dropKey = true; softDropTimer = 0;
+      softDrop();
+      break;
+    case 'cw': rotate(1); render(); break;
+    case 'ccw': rotate(-1); render(); break;
+    case 'hard': hardDrop(); break;
+    case 'hold': hold(); break;
+  }
+});
+
+document.addEventListener('keyup', e => {
+  const action = KEY[e.key];
+  if (action === 'left') leftKey = false;
+  if (action === 'right') rightKey = false;
+  if (action === 'down') dropKey = false;
+});
+
+ovBtn.addEventListener('click', () => {
+  // 关键：移除焦点，否则空格键会再次触发按钮点击，方向键也可能被吞
+  ovBtn.blur();
+  if (state === 'paused') resume();
+  else startGame();
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state === 'playing') pause();
+});
+
+/* ==================== 触摸手势 ==================== */
+(function initTouch(){
+  let sx = 0, sy = 0, lastX = 0, lastY = 0, moved = false, t0 = 0;
+  const THRESH = Math.max(18, BS * 0.8);   // 一个格子宽度左右算一次移动
+
+  boardCanvas.addEventListener('touchstart', e => {
+    if (state !== 'playing') return;
+    const t = e.touches[0];
+    sx = lastX = t.clientX; sy = lastY = t.clientY;
+    moved = false; t0 = Date.now();
+    e.preventDefault();
+  }, { passive: false });
+
+  boardCanvas.addEventListener('touchmove', e => {
+    if (state !== 'playing') return;
+    const t = e.touches[0];
+    const dx = t.clientX - lastX, dy = t.clientY - lastY;
+    // 横向滑动：每够一格移动一次
+    if (Math.abs(dx) >= THRESH * 0.9){
+      move(dx > 0 ? 1 : -1, 0);
+      lastX = t.clientX;
+      moved = true;
+      render();
+    }
+    // 下滑：软降
+    if (dy >= THRESH && Math.abs(t.clientX - sx) < Math.abs(t.clientY - sy)){
+      move(0, 1); addScore(1);
+      lastY = t.clientY;
+      moved = true;
+      render();
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  boardCanvas.addEventListener('touchend', e => {
+    if (state !== 'playing') return;
+    const dt = Date.now() - t0;
+    const t = e.changedTouches[0];
+    const totalDx = t.clientX - sx, totalDy = t.clientY - sy;
+    // 快速上滑 → 硬降
+    if (Math.abs(totalDy) > 50 && totalDy < 0 && Math.abs(totalDx) < Math.abs(totalDy)) {
+      hardDrop();
+    }
+    // 轻点 → 旋转
+    else if (!moved && dt < 260 && Math.abs(totalDx) < 14 && Math.abs(totalDy) < 14) {
+      rotate(1); render();
+    }
+    e.preventDefault();
+  }, { passive: false });
+})();
+
+/* ==================== 状态切换 ==================== */
+function startGame(){
+  reset();
+  state = 'playing';
+  lastTime = 0;
+  hideOverlay();
+}
+
+function pause(){
+  state = 'paused';
+  showOverlay('已暂停', '按 P 或点击按钮继续', '继续');
+}
+
+function resume(){
+  state = 'playing';
+  lastTime = 0;
+  hideOverlay();
+}
+
+function gameOver(){
+  state = 'over';
+  showOverlay('游戏结束',
+    `最终得分 ${score.toLocaleString('en-US')} · 等级 ${level} · 消行 ${lines}`,
+    '再来一局');
+}
+
+function showOverlay(title, text, btnLabel){
+  ovTitle.textContent = title;
+  ovText.innerHTML = text;
+  ovBtn.textContent = btnLabel;
+  overlay.classList.add('show');
+}
+function hideOverlay(){
+  overlay.classList.remove('show');
+  ovTitle.textContent = '俄罗斯方块';
+  ovText.innerHTML = '方向键移动 · ↑旋转 · 空格硬降<br>C 暂存 · P 暂停';
+  ovBtn.textContent = '开始游戏';
+}
+
+/* ==================== 启动 ==================== */
+reset();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
