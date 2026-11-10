@@ -257,6 +257,8 @@ let score, lines, level, combo, backToBack;
 let gravityAcc, gravityTimer;
 let softDropTimer, leftTimer, rightTimer, lockTimer, lockResets;
 let dropKey, leftKey, rightKey;
+// DAS 阶段标记：false=仍在首次延迟中，true=已进入 ARR 连发阶段
+let leftArmed = false, rightArmed = false;
 let state = 'ready';      // ready | playing | paused | over
 let lastTime = 0;
 let animFrame = 0;
@@ -328,6 +330,7 @@ function reset(){
   softDropTimer = 0; leftTimer = 0; rightTimer = 0;
   lockTimer = 0; lockResets = 0;
   dropKey = leftKey = rightKey = false;
+  leftArmed = rightArmed = false;
   animFrame = 0;
   ensureNext();
   spawn();
@@ -372,6 +375,7 @@ function spawn(){
   // 关键：重置下落与输入计时，避免上一块的状态残留（如按住方向键的 DAS 计时）
   softDropTimer = SOFT_DROP_INTERVAL;
   leftTimer = 0; rightTimer = 0;
+  leftArmed = false; rightArmed = false;
 
   // 出生即碰撞 → 游戏结束
   if (collide(cur.type, cur.states[0], cur.x, cur.y)){
@@ -691,6 +695,8 @@ function updateHUD(){
   levelEl.textContent = level;
   linesEl.textContent = lines;
   dropKey = leftKey = rightKey = false;
+  leftArmed = rightArmed = false;
+  leftTimer = rightTimer = 0;
 }
 
 /* ==================== 主循环 ==================== */
@@ -727,9 +733,24 @@ function loop(t){
     }
   } else softDropTimer = SOFT_DROP_INTERVAL;
 
-  // 左右重复
-  if (leftKey){ leftTimer += dt; while (leftTimer >= ARR){ leftTimer -= ARR; move(-1, 0); } }
-  if (rightKey){ rightTimer += dt; while (rightTimer >= ARR){ rightTimer -= ARR; move(1, 0); } }
+  // 左右移动：按住后先等 DAS 延迟，再从 0 开始按 ARR 连发
+  if (leftKey){
+    leftTimer += dt;
+    if (!leftArmed){
+      // 首次延迟阶段：累积满 DAS 才走第一格，然后切到连发
+      if (leftTimer >= DAS){ leftArmed = true; leftTimer = 0; move(-1, 0); }
+    } else {
+      while (leftTimer >= ARR){ leftTimer -= ARR; move(-1, 0); }
+    }
+  }
+  if (rightKey){
+    rightTimer += dt;
+    if (!rightArmed){
+      if (rightTimer >= DAS){ rightArmed = true; rightTimer = 0; move(1, 0); }
+    } else {
+      while (rightTimer >= ARR){ rightTimer -= ARR; move(1, 0); }
+    }
+  }
 
   // 锁定延迟
   if (isGrounded()){
@@ -770,12 +791,13 @@ document.addEventListener('keydown', e => {
 
   switch (action){
     case 'left':
-      leftKey = true; leftTimer = DAS;
+      // 按下瞬间走一格；计时归零，按住满 DAS 后才开始连发
+      leftKey = true; leftTimer = 0; leftArmed = false;
       move(-1, 0);
       render();
       break;
     case 'right':
-      rightKey = true; rightTimer = DAS;
+      rightKey = true; rightTimer = 0; rightArmed = false;
       move(1, 0);
       render();
       break;
@@ -792,8 +814,8 @@ document.addEventListener('keydown', e => {
 
 document.addEventListener('keyup', e => {
   const action = KEY[e.key];
-  if (action === 'left') leftKey = false;
-  if (action === 'right') rightKey = false;
+  if (action === 'left'){ leftKey = false; leftArmed = false; leftTimer = 0; }
+  if (action === 'right'){ rightKey = false; rightArmed = false; rightTimer = 0; }
   if (action === 'down') dropKey = false;
 });
 
